@@ -100,8 +100,7 @@ void select_loop(void) {
       dnsfd = dns_waitfd();
       FD_SET(dnsfd, &readfd);
       if(dnsfd >= maxfd) maxfd = dnsfd + 1;
-    } else
-      dnsfd = 0;
+    } else dnsfd = 0;
 
     netfd = net_waitfd();
     FD_SET(netfd, &readfd);
@@ -112,68 +111,68 @@ void select_loop(void) {
 
     do {
       if(anyset || paused) {
-	/* Set timeout to 0.1s.
-	 * While this is almost instantaneous for human operators,
-	 * it's slow enough for computers to go do something else;
-	 * this prevents mtr from hogging 100% CPU time on one core.
-	 */
-	selecttime.tv_sec = 0;
-	selecttime.tv_usec = paused?100000:0; 
-      
-	rv = select(maxfd, (void *)&readfd, &writefd, NULL, &selecttime);
+        /* Set timeout to 0.1s.
+         * While this is almost instantaneous for human operators,
+         * it's slow enough for computers to go do something else;
+         * this prevents mtr from hogging 100% CPU time on one core.
+         */
+        selecttime.tv_sec = 0;
+        selecttime.tv_usec = paused?100000:0; 
+          
+        rv = select(maxfd, (void *)&readfd, &writefd, NULL, &selecttime);
 
       } else {
-	if(Interactive) display_redraw();
+        if(Interactive) display_redraw();
 
-	gettimeofday(&thistime, NULL);
+        gettimeofday(&thistime, NULL);
 
-	if(thistime.tv_sec > lasttime.tv_sec + intervaltime.tv_sec ||
-	   (thistime.tv_sec == lasttime.tv_sec + intervaltime.tv_sec &&
-	    thistime.tv_usec >= lasttime.tv_usec + intervaltime.tv_usec)) {
-	  lasttime = thistime;
+        if(thistime.tv_sec > lasttime.tv_sec + intervaltime.tv_sec ||
+           (thistime.tv_sec == lasttime.tv_sec + intervaltime.tv_sec &&
+            thistime.tv_usec >= lasttime.tv_usec + intervaltime.tv_usec)) {
+          lasttime = thistime;
 
-	  if (!graceperiod) {
-	    if (NumPing >= MaxPing && (!Interactive || ForceMaxPing)) {
-	      graceperiod = 1;
-	      startgrace = thistime;
-	    }
+          if (!graceperiod) {
+            if (NumPing >= MaxPing && (!Interactive || ForceMaxPing)) {
+              graceperiod = 1;
+              startgrace = thistime;
+            }
 
-	    /* do not send out batch when we've already initiated grace period */
-	    if (!graceperiod && net_send_batch())
-	      NumPing++;
-	  }
-	}
+            /* do not send out batch when we've already initiated grace period */
+            if (!graceperiod && net_send_batch())
+              NumPing++;
+          }
+        }
 
-	if (graceperiod) {
-	  dt = (thistime.tv_usec - startgrace.tv_usec) +
-		    1000000 * (thistime.tv_sec - startgrace.tv_sec);
-	  if (dt > GRACETIME)
-	    return;
-	}
+        if (graceperiod) {
+          dt = (thistime.tv_usec - startgrace.tv_usec) +
+                1000000 * (thistime.tv_sec - startgrace.tv_sec);
+          if (dt > GRACETIME)
+            return;
+        }
 
-	selecttime.tv_usec = (thistime.tv_usec - lasttime.tv_usec);
-	selecttime.tv_sec = (thistime.tv_sec - lasttime.tv_sec);
-	if (selecttime.tv_usec < 0) {
-	  --selecttime.tv_sec;
-	  selecttime.tv_usec += 1000000;
-	}
-	selecttime.tv_usec = intervaltime.tv_usec - selecttime.tv_usec;
-	selecttime.tv_sec = intervaltime.tv_sec - selecttime.tv_sec;
-	if (selecttime.tv_usec < 0) {
-	  --selecttime.tv_sec;
-	  selecttime.tv_usec += 1000000;
-	}
+        selecttime.tv_usec = (thistime.tv_usec - lasttime.tv_usec);
+        selecttime.tv_sec = (thistime.tv_sec - lasttime.tv_sec);
+        if (selecttime.tv_usec < 0) {
+          --selecttime.tv_sec;
+          selecttime.tv_usec += 1000000;
+        }
+        selecttime.tv_usec = intervaltime.tv_usec - selecttime.tv_usec;
+        selecttime.tv_sec = intervaltime.tv_sec - selecttime.tv_sec;
+        if (selecttime.tv_usec < 0) {
+          --selecttime.tv_sec;
+          selecttime.tv_usec += 1000000;
+        }
 
-	if (dns) {
-	  if ((selecttime.tv_sec > (time_t)dnsinterval) ||
-	      ((selecttime.tv_sec == (time_t)dnsinterval) &&
-	       (selecttime.tv_usec > ((time_t)(dnsinterval * 1000000) % 1000000)))) {
-	    selecttime.tv_sec = (time_t)dnsinterval;
-	    selecttime.tv_usec = (time_t)(dnsinterval * 1000000) % 1000000;
-	  }
-	}
+        if (dns) {
+          if ((selecttime.tv_sec > (time_t)dnsinterval) ||
+              ((selecttime.tv_sec == (time_t)dnsinterval) &&
+               (selecttime.tv_usec > ((time_t)(dnsinterval * 1000000) % 1000000)))) {
+            selecttime.tv_sec = (time_t)dnsinterval;
+            selecttime.tv_usec = (time_t)(dnsinterval * 1000000) % 1000000;
+          }
+        }
 
-	rv = select(maxfd, (void *)&readfd, NULL, NULL, &selecttime);
+        rv = select(maxfd, (void *)&readfd, NULL, NULL, &selecttime);
       }
     } while ((rv < 0) && (errno == EINTR));
 
@@ -238,6 +237,10 @@ void select_loop(void) {
 	  display_clear();
 	}
 	break;
+      case ActionGeoip:
+        use_geoip = !use_geoip;
+        display_clear();
+    break;
 #ifdef IPINFO
       case ActionII:
 	if (ipinfo_no >= 0) {

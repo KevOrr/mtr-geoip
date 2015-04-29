@@ -1,0 +1,30 @@
+GUI ok
+NETWORK
+    do we need a fd?
+    
+    1/ use an installed program? what about security
+        SECURITY? since mtr runs as root, the other program will be run as root as well.
+                    this is not good.
+
+*   2/ retrieve and parse a webservice in json/xml/*csv*?
+        probably better. Though it means we depend on a webservice from there on.
+        SECURITY? it has to be dealt with
+        HOW?
+            Open an HTTP socket?
+            Manage it?
+            Read the content?
+            This is going to be mad...
+            But can probably find examples.
+            ALL THAT IN ROOT? SERIOUSLY? WELL, THEY DO IT FOR DNS. YES BUT THEY ARE EXPERIENCED SYSPROGRAMERS.
+            well we can try to learn.
+    
+    3/ since we are root, we can try to run a process in nobody.
+        could be curl, running in nobody, saving to eg
+            /tmp/mtr34822 with rwxrwx--- root nobody
+                152.53.56.143 "Shanghai, China"
+       But you want to fork? No just make a system call.    
+
+    4/ we may also link against a library. Either a geoip of freegeoip lib (so the
+        code would need to include one such lib, perhaps with a database..)
+        or a library to retrieve http.
+        A GOOD COMPROMISE SEEMS /usr/include/curl/easy.h ......!

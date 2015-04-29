@@ -117,6 +117,8 @@ int mtr_curses_keyaction(void)
     return ActionReset;
   if (tolower(c) == 'd')
     return ActionDisplay;
+  if (tolower(c) == 'c')
+      return ActionGeoip;
   if (tolower(c) == 'e')
     return ActionMPLS;
   if (tolower(c) == 'n')
@@ -291,6 +293,7 @@ int mtr_curses_keyaction(void)
     printw("  ?|h     help\n" );
     printw("  p       pause (SPACE to resume)\n" );
     printw("  d       switching display mode\n" );
+    printw("  c       show geoip (city and country\n" );
     printw("  e       toggle MPLS information on/off\n" );
     printw("  n       toggle DNS on/off\n" );
     printw("  r       reset all counters\n" );
@@ -319,7 +322,10 @@ int mtr_curses_keyaction(void)
   return ActionNone;          /* ignore unknown input */
 }
 
-
+/*
+ * This is what get's displayed under the head line (which is in
+ * mtr_curses_redraw())
+ */
 void mtr_curses_hosts(int startstat) 
 {
   int max;
@@ -352,11 +358,20 @@ void mtr_curses_hosts(int startstat)
         if (show_ips) printw("%s (%s)", name, strlongip(addr));
         else printw("%s", name);
       } else {
-	printw("%s", strlongip( addr ) );
+        printw("%s", strlongip( addr ) );
       }
       attroff(A_BOLD);
 
       getyx(stdscr, y, __unused_int);
+      
+      if (use_geoip) {
+        int colgeo = 26;
+        move(y, colgeo-1);
+        printw("%26s", " ");
+        move(y, colgeo);
+        printw("%s", "Unknown");
+      }
+
       move(y, startstat);
 
       /* net_xxx returns times in usecs. Just display millisecs */
@@ -492,7 +507,7 @@ void mtr_curses_init() {
 
 static int block_col[NUM_FACTORS+1] =
 {	// 1:black 2:red 3:green 4:brown/yellow 5:blue 6:magenta 7:cyan 8:white
-        COLOR_PAIR(2)|A_BOLD,
+    COLOR_PAIR(2)|A_BOLD,
 	A_NORMAL,
 	COLOR_PAIR(3),
 	COLOR_PAIR(3)|A_BOLD,
@@ -578,6 +593,13 @@ void mtr_curses_graph(int startstat, int cols)
 		attroff(A_BOLD);
 
 		getyx(stdscr, y, __unused_int);
+        if (use_geoip) {
+            int colgeo = 20;
+            move(y, colgeo-1);
+            printw("%20s", " ");
+            move(y, colgeo);
+            printw("%s", "Unknown");
+        }
 		move(y, startstat);
 
 		printw(" ");
@@ -586,7 +608,11 @@ void mtr_curses_graph(int startstat, int cols)
 	}
 }
 
-
+/*
+ * head line (with My traceroute, and the various column headers
+ * @sa mtr_curses_hosts() lines of data
+ * @sa mtr_curses_graph()
+ */
 void mtr_curses_redraw(void)
 {
   int maxx;
@@ -607,7 +633,7 @@ void mtr_curses_redraw(void)
 
   move(0, 0);
   attron(A_BOLD);
-  pwcenter("My traceroute  [v" MTR_VERSION "]");
+  pwcenter("My traceroute  [v" MTR_VERSION "+legum28]");
   attroff(A_BOLD);
 
   mvprintw(1, 0, "%s (%s)", LocalHostname, net_localaddr());
@@ -632,21 +658,23 @@ void mtr_curses_redraw(void)
   printw("Keys:  ");
   attron(A_BOLD); printw("H"); attroff(A_BOLD); printw("elp   ");
   attron(A_BOLD); printw("D"); attroff(A_BOLD); printw("isplay mode   ");
+  attron(A_BOLD); printw("C"); attroff(A_BOLD); printw("ity/country ");
   attron(A_BOLD); printw("R"); attroff(A_BOLD); printw("estart statistics   ");
   attron(A_BOLD); printw("O"); attroff(A_BOLD); printw("rder of fields   ");
   attron(A_BOLD); printw("q"); attroff(A_BOLD); printw("uit\n");
   
   if (display_mode == 0) {
     for (i=0; i < MAXFLD; i++ ) {
-	j = fld_index[fld_active[i]];
-	if (j < 0) continue;
+        j = fld_index[fld_active[i]];
+        if (j < 0) continue;
 
-	sprintf( fmt, "%%%ds", data_fields[j].length );
-        sprintf( buf + hd_len, fmt, data_fields[j].title );
-	hd_len +=  data_fields[j].length;
+        sprintf( fmt, "%%%ds", data_fields[j].length );
+            sprintf( buf + hd_len, fmt, data_fields[j].title );
+        hd_len +=  data_fields[j].length;
     }
     attron(A_BOLD);
     mvprintw(rowstat - 1, 0, " Host");
+    if (use_geoip) mvprintw(rowstat - 1, 25, " City, Country");
     mvprintw(rowstat - 1, maxx-hd_len-1, "%s", buf);
     mvprintw(rowstat - 2, maxx-hd_len-1, "   Packets               Pings");
     attroff(A_BOLD);

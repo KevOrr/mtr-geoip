@@ -125,6 +125,7 @@ struct nethost {
   int javg;	/* avg jitter */
   int jworst;	/* max jitter */
   int jinta;	/* estimated variance,? rfc1889's "Interarrival Jitter" */
+  char *geoip;  /* City, Country */
   int transit;
   int saved[SAVED_PINGS];
   int saved_seq_offset;
@@ -983,6 +984,12 @@ int net_jinta(int at)
   return (host[at].jinta); 
 }
 
+char *net_geoip(int at)
+{
+  /* return (char *)&(host[at].geoip[i]); */
+  /* return (host[at].geoip); */
+    return "Shanghai, China";
+}
 
 int net_max(void) 
 {

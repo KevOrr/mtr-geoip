@@ -62,6 +62,7 @@ extern int enablempls;
 extern int dns;
 extern int show_ips;
 extern int use_dns;
+extern int use_geoip;
 
 #ifdef __GNUC__
 #define UNUSED __attribute__((__unused__))

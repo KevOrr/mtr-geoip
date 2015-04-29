@@ -41,6 +41,7 @@
 #include "getopt.h"
 #include "display.h"
 #include "dns.h"
+#include "geoip.h"
 #include "report.h"
 #include "net.h"
 #include "asn.h"
@@ -553,6 +554,8 @@ int main(int argc, char **argv)
 #endif
 
   /*  Get the raw sockets first thing, so we can drop to user euid immediately  */
+
+  geoip_open();
 
   if ( ( net_preopen_result = net_preopen () ) ) {
     fprintf( stderr, "mtr: unable to get raw sockets.\n" );

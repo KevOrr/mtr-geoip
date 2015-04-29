@@ -1,6 +1,6 @@
 # .gitignore
 *.o
-
+MAKE
 Makefile
 Makefile.in
 aclocal.m4
