@@ -43,6 +43,7 @@
 #include "net.h"
 #include "display.h"
 #include "dns.h"
+#include "geoip.h"
 
 /*  We can't rely on header files to provide this information, because
     the fields have different names between, for instance, Linux and 
@@ -125,14 +126,13 @@ struct nethost {
   int javg;	/* avg jitter */
   int jworst;	/* max jitter */
   int jinta;	/* estimated variance,? rfc1889's "Interarrival Jitter" */
-  char *geoip;  /* City, Country */
+  struct geoip_t *geoip;  /* City, Country */
   int transit;
   int saved[SAVED_PINGS];
   int saved_seq_offset;
   struct mplslen mpls;
   struct mplslen mplss[MAXPATH];
 };
-
 
 struct sequence {
   int index;
@@ -141,7 +141,6 @@ struct sequence {
   struct timeval time;
   int socket;
 };
-
 
 /* Configuration parameter: How many queries to unknown hosts do we
    send? (This limits the amount of traffic generated if a host is not
@@ -984,11 +983,17 @@ int net_jinta(int at)
   return (host[at].jinta); 
 }
 
-char *net_geoip(int at)
+struct geoip_t *net_geoip(int at)
 {
-  /* return (char *)&(host[at].geoip[i]); */
-  /* return (host[at].geoip); */
-    return "Shanghai, China";
+	struct geoip_t *r = (host[at].geoip);
+	if (r == NULL) {
+		r = (struct geoip_t *)(malloc(sizeof(struct geoip_t)));
+		r->date_requested = 0;
+		r->is_available = 0;
+
+		geoip_lookup(&host[at].addr, r);
+	}
+	return r;
 }
 
 int net_max(void) 

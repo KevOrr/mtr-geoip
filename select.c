@@ -31,6 +31,7 @@
 
 #include "mtr.h"
 #include "dns.h"
+#include "geoip.h"
 #include "net.h"
 #include "asn.h"
 #include "display.h"
@@ -40,6 +41,7 @@ extern int MaxPing;
 extern int ForceMaxPing;
 extern float WaitTime;
 double dnsinterval;
+double geoipinterval;
 extern int mtrtype;
 
 static struct timeval intervaltime;
@@ -57,6 +59,7 @@ void select_loop(void) {
 #ifdef ENABLE_IPV6
   int dnsfd6;
 #endif
+  int geoipfd = 0;
   int NumPing = 0;
   int paused = 0;
   struct timeval lasttime, thistime, selecttime;
@@ -101,6 +104,11 @@ void select_loop(void) {
       FD_SET(dnsfd, &readfd);
       if(dnsfd >= maxfd) maxfd = dnsfd + 1;
     } else dnsfd = 0;
+
+	geoipfd = geoip_waitfd();
+	FD_SET(geoipfd, &readfd);
+	if (geoipfd >= maxfd) maxfd = geoipfd + 1;
+	else geoipfd = 0;
 
     netfd = net_waitfd();
     FD_SET(netfd, &readfd);
@@ -193,6 +201,9 @@ void select_loop(void) {
       dnsinterval = WaitTime;
       dns_events(&dnsinterval);
     }
+
+	geoipinterval = WaitTime;
+	geoip_events(&geoipinterval);	
 
     /*  Have we finished a nameservice lookup?  */
 #ifdef ENABLE_IPV6

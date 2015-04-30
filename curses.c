@@ -63,6 +63,7 @@
 #include "mtr-curses.h"
 #include "net.h"
 #include "dns.h"
+#include "geoip.h"
 #include "asn.h"
 #include "display.h"
 
@@ -365,11 +366,15 @@ void mtr_curses_hosts(int startstat)
       getyx(stdscr, y, __unused_int);
       
       if (use_geoip) {
+	struct geoip_t *pgeo = net_geoip(at);	
         int colgeo = 26;
         move(y, colgeo-1);
         printw("%26s", " ");
         move(y, colgeo);
-        printw("%s", "Unknown");
+        if (pgeo->is_available == 1) {
+		printw("%s", "OK!");	
+	}
+	else printw("%s", "Unknown");
       }
 
       move(y, startstat);

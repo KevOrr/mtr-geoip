@@ -28,3 +28,57 @@ NETWORK
         code would need to include one such lib, perhaps with a database..)
         or a library to retrieve http.
         A GOOD COMPROMISE SEEMS /usr/include/curl/easy.h ......!
+
+
+-----
+net.c
+struct nethost {
+  ip_t addr;
+  ip_t addrs[MAXPATH];	/* for multi paths byMin */
+  int xmit;
+  int returned;
+  int sent;
+  int up;
+  long long var;/* variance, could be overflowed */
+  int last;
+  int best;
+  int worst;
+  int avg;	/* average:  addByMin */
+  int gmean;	/* geometirc mean: addByMin */
+  int jitter;	/* current jitter, defined as t1-t0 addByMin */
+/*int jbest;*/	/* min jitter, of cause it is 0, not needed */
+  int javg;	/* avg jitter */
+  int jworst;	/* max jitter */
+  int jinta;	/* estimated variance,? rfc1889's "Interarrival Jitter" */
+  char *geoip;  /* City, Country */
+  int transit;
+  int saved[SAVED_PINGS];
+  int saved_seq_offset;
+  struct mplslen mpls;
+  struct mplslen mplss[MAXPATH];
+};
+
+struct {
+	int		date_requested;	/* last time it was requested */
+					/* for retry after timeout */
+	unsigned short	is_available;	/* was it received */
+	
+	char		*country_code;	/* US */
+	char		*country_name;	/* United States */
+	char		*region_code;	/* CA */
+	char		*region_name;	/* California */
+	char		*city;		/* Mountain View */
+	char		*zip_code;	/* 94040 */
+	char		*time_zone;	/* America/Los Angeles */
+	float		latitude;	/* 37.386 */
+	float		longitude;	/* -122.084 */
+	short int	metro_code;	/* 807 */
+} geoip_t; 
+
+char *net_geoip(int at)
+{
+  /* return (char *)&(host[at].geoip[i]); */
+  /* return (host[at].geoip); */
+    return "Shanghai, China";
+}
+

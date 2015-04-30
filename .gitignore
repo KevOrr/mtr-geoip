@@ -1,7 +1,7 @@
 # .gitignore
 *.o
 MAKE
-Makefile
+Makefile*
 Makefile.in
 aclocal.m4
 confdefs.h
@@ -16,6 +16,7 @@ missing
 stamp-h1*
 
 /autom4te.cache/
+*.sw*
 /.deps/
 /ChangeLog
 /INSTALL
