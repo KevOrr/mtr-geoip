@@ -63,6 +63,8 @@
 
 int use_geoip = 0;
 char* freegeoip_address;
+char freegeoip_host[] = "freegeoip.net";
+char freegeoip_useragent[] = "mtr-geoip";
 
 int monofd;			/* just look up the first one for the time being */
 int tmpres;
@@ -77,7 +79,7 @@ enum {
 };
 
 
-double sweeptime;
+double geoip_sweeptime;
 extern int af;
 
 dword geoip_mem = 0;
@@ -146,21 +148,39 @@ void geoip_open(void)
 	
 	int found = 0;
 	int i;
-	for (i=0; i<10; i++) {
-		if ((hent = gethostbyname("freegeoip.net")) == NULL) {
-			fprintf(stderr, "geoip_open: Can't get IP of freegeoip.net");
+	int maxtries = 10;
+	int secondsdelay = 5;
+	fprintf(stderr, "Attempting to resolve %s", freegeoip_host);
+	for (i=0; i<maxtries; i++) {
+		if ((hent = gethostbyname(freegeoip_host)) == NULL) {
+			fprintf(stderr, "geoip_open: Can't get IP of %s", freegeoip_host);
 			exit(1);
 		}
-		if (inet_ntop(AF_INET, (void *)hent->h_addr_list[0], freegeoip_address, iplen) == NULL) { 
-			fprintf(stderr, "geoip_open: warn: unable to resolve freegeoip.net, retrying in 1 sec (%d/%d max)\n", i, 10);
-			found = 0; 
-			sleep(1); 
-		}
-		else { found = 1; break; }
+		//for (j=0; j<hent->h_length; j++) fprintf(stdout, "hent[%d]: %s\n", j, hent->h_addr_list[j]);
+		char** addr = hent->h_addr_list;
+		do {
+			fprintf(stdout, "hent[]: %s (%s)\n", *addr, freegeoip_address);
+			//if (inet_ntop(AF_INET, (void *)hent->h_addr_list[0], freegeoip_address, iplen) == NULL) { 
+			if (inet_ntop(AF_INET, (void *)*addr, freegeoip_address, iplen) == NULL) { 
+				found = 0; 
+				sleep(secondsdelay); 
+				switch (errno) {
+						case EAFNOSUPPORT:
+							fprintf(stderr, " Error: EAFNOSUPPORT (AF_INET not a supported family)\n");
+							break;
+						case ENOSPC:
+							fprintf(stderr, " Error: ENOSPC (The converted string would exceed the size give, ie %d)\n", iplen);
+							break;
+						default:
+							fprintf(stderr, " Error: unknown in geoip_open()\n");
+					}
+				fprintf(stderr, ".");
+			}
+			else { found = 1; break; }
+		} while (*(++addr));
 	}
-	
 	if (found == 0) {
-			fprintf(stderr, "geoip_open: Can't resolve freegeoip.net (tried 10 times");
+			fprintf(stderr, "Error (tried %d times)\n", maxtries);
 			switch (errno) {
 				case EAFNOSUPPORT:
 					fprintf(stderr, " Error: EAFNOSUPPORT (AF_INET not a supported family)\n");
@@ -168,52 +188,71 @@ void geoip_open(void)
 				case ENOSPC:
 					fprintf(stderr, " Error: ENOSPC (The converted string would exceed the size give, ie %d)\n", iplen);
 					break;
+				default:
+					fprintf(stderr, " Error: unknown in geoip_open()\n");
 			}
 			exit(1);
 	}
-	fprintf(stdout, "IP of freegeoip is %s\n", freegeoip_address);
-	
+	else fprintf(stdout, " OK (%s)\n", freegeoip_address);
 	monosock = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in *));
 	monosock->sin_family = AF_INET;
-//	tmpres = inet_pton(AF_INET, freegeoip_address, (void *)(&(monosock->sin_addr.s_addr)));
-//	if (tmpres < 0) {
-//		fprintf(stderr, "geoip: %s is not a valid IP Address\n", freegeoip_address);
-//		exit(1);
-//	}
+	tmpres = inet_pton(AF_INET, freegeoip_address, (void *)(&(monosock->sin_addr.s_addr)));
+	if (tmpres < 0) {
+		fprintf(stderr, "geoip: %s is not a valid IP Address\n", freegeoip_address);
+		exit(1);
 	}
+	monosock->sin_port = htons(80);
+	if (connect(monofd, (struct sockaddr *) monosock, sizeof(struct sockaddr)) < 0) {
+		perror("Could not connect");
+		exit(1);
+	}
+	
+}
 
 void geoip_events(double *sinterval)
 {
   struct geoip_locate *rp, *nextrp;
 /*	geoip_restell("BLABLABLA");
  */
- for (rp = geoip_expireresolves;(rp) && (sweeptime >= rp->expiretime);rp = nextrp) {
+//	if (!geoip_expireresolves) fprintf(stderr, "NOTHNG TO expiresolves");
+//	else {
+//		rp = geoip_expireresolves;
+//		fprintf(stderr, "TATATA sweep:%f exp:%f", geoip_sweeptime, rp->expiretime);
+//		exit(1);
+//	}
+ for (rp = geoip_expireresolves;(rp) && (geoip_sweeptime >= rp->expiretime);rp = nextrp) {
+fprintf(stderr, "state:%d\n", rp->state);
     nextrp = rp->next;
     switch (rp->state) {
     case STATE_FINISHED:	/* TTL has expired */
+fprintf(stderr, "finished");
+exit(1);
     case STATE_FAILED:	/* Fake TTL has expired */
+fprintf(stderr, "failed");
+exit(1);
 /*      if (geoip_debug) {
 	snprintf(tempstring, sizeof(tempstring), "geoip_locator: Cache record for \"%s\" (%s) has expired. (state: %u)  Marked for expire at: %g, time: %g.",
                 nonull(rp->hostname), geoip_strlongip( &(rp->ip) ), 
-		rp->state, rp->expiretime, sweeptime);
+		rp->state, rp->expiretime, geoip_sweeptime);
 	geoip_restell(tempstring);
       }
 */
       geoip_unlinkresolve(rp);
       break;
     case STATE_REQ1:	/* First T_PTR send timed out */
-      geoip_resendrequest(rp);
+			geoip_dorequest(rp);
       geoip_restell("geoip locator: Send #2 for \"PTR\" query...");
+      fprintf(stderr, "geoip locator: Send #2 for \"PTR\" query...");
       rp->state++;
-      rp->expiretime = sweeptime + ResRetryDelay2;
+      rp->expiretime = geoip_sweeptime + ResRetryDelay2;
       (void)geoip_istime(rp->expiretime,sinterval);
       geoip_res_resend++;
       break;
     case STATE_REQ2:	/* Second T_PTR send timed out */
-      geoip_resendrequest(rp);
+			geoip_dorequest(rp);
       geoip_restell("geoip locator: Send #3 for \"PTR\" query...");
       rp->state++;
-      rp->expiretime = sweeptime + ResRetryDelay3;
+      rp->expiretime = geoip_sweeptime + ResRetryDelay3;
       (void)geoip_istime(rp->expiretime,sinterval);
       geoip_res_resend++;
       break;
@@ -223,6 +262,9 @@ void geoip_events(double *sinterval)
       (void)geoip_istime(rp->expiretime,sinterval);
       geoip_res_timeout++;
       break;
+		default:	
+			fprintf(stderr, "AFAWFWEF");
+			geoip_restell("GEOIP DEFAULT");
     }
   }
   if (geoip_expireresolves)
@@ -232,7 +274,7 @@ void geoip_events(double *sinterval)
 void geoip_lookup(ip_t * ip, struct geoip_t *pgeoip_t) 
 {
   struct geoip_locate *rp;
-	geoip_restell("IMPL geoip_lookup");
+//	geoip_restell("IMPL geoip_lookup");
 
   if ((rp = geoip_findip(ip))) {
     if ((rp->state == STATE_FINISHED) || (rp->state == STATE_FAILED)) {
@@ -258,7 +300,8 @@ void geoip_lookup(ip_t * ip, struct geoip_t *pgeoip_t)
   rp = geoip_allocresolve();
   rp->state = STATE_REQ1;
 	rp->geoip = pgeoip_t;
-  rp->expiretime = sweeptime + ResRetryDelay1;
+  rp->expiretime = geoip_sweeptime + ResRetryDelay1;
+  //rp->expiretime = geoip_sweeptime + ResRetryDelay1;
   addrcpy( (void *) &(rp->ip), (void *) ip, af );
   geoip_linkresolve(rp);
   addrcpy( (void *) &(rp->ip), (void *) ip, af );
@@ -267,9 +310,8 @@ void geoip_lookup(ip_t * ip, struct geoip_t *pgeoip_t)
   return;
 }
 
-void geoip_dorequest(char *s,word id)
+void geoip_dorequest(struct geoip_locate* rp)
 {
-	geoip_restell("geoip locator: dorequest");
 	// ALEX PLEASE CHANGE ALL OF THIS
 /*
   packetheader *hp;
@@ -297,37 +339,32 @@ void geoip_dorequest(char *s,word id)
     }
 #endif
 */
-}
+	// Build query
+	char query[256];
+	char page[100];
+  sprintf(tempstring,"/csv/%u.%u.%u.%u",
+	    ((byte *)&rp->ip)[0],
+	    ((byte *)&rp->ip)[1],
+	    ((byte *)&rp->ip)[2],
+	    ((byte *)&rp->ip)[3]);
+	strcpy(page, tempstring);
+	char *tpl = "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
+	// -5 to consider the %s %s %s in tpl and the ending \0
+	sprintf(query, tpl, page, freegeoip_host, freegeoip_useragent);
+	fprintf(stderr, "Query is:\n<<START>>\n%s<<END>>\n", query);
 
-
-void geoip_resendrequest(struct geoip_locate *rp)
-{
-	geoip_restell("geoip locator: resendrequest");
-    switch ( af ) {
-			case AF_INET:
-//ALEX CHANGE HERE PLEASE
-/*				sprintf(tempstring,"%u.%u.%u.%u.in-addr.arpa",
-				((byte *)&rp->ip)[3],
-				((byte *)&rp->ip)[2],
-				((byte *)&rp->ip)[1],
-				((byte *)&rp->ip)[0]);
-*/
-				fprintf(stdout, "we would send here");
-				break;
-				#ifdef ENABLE_IPV6
-			case AF_INET6:
-//				addr2ip6arpa( &(rp->ip), tempstring );
-				break;
-				#endif
+	// Send the query to the server
+	int sent = 0;
+	while(sent < strlen(query)) {
+		int howmany = send(monofd, query+sent, strlen(query)-sent, 0);
+		if(howmany == -1) {
+			fprintf(stderr, "Can't send query\n");
+			exit(1);
 		}
-//		geoip_dorequest(tempstring,rp->id);
-		if (geoip_debug) {
-				snprintf(tempstring, sizeof(tempstring), "geoip: Sent domain location request for \"%s\".",
-					geoip_strlongip( &(rp->ip) ));
-				geoip_restell(tempstring);
-    }
+		sent += howmany;
+	}
+	// Now it is time to receive, we will select	
 }
-
 
 void geoip_restell(char *s)
 {
@@ -441,9 +478,9 @@ void geoip_unlinkresolveip(struct geoip_locate *rp)
 int geoip_istime(double x,double *sinterval)
 {
   if (x) {
-    if (x > sweeptime) {
-      if (*sinterval > x - sweeptime)
-	*sinterval = x - sweeptime;
+    if (x > geoip_sweeptime) {
+      if (*sinterval > x - geoip_sweeptime)
+	*sinterval = x - geoip_sweeptime;
     } else
       return 1;
   }
@@ -453,7 +490,7 @@ int geoip_istime(double x,double *sinterval)
 void geoip_passrp(struct geoip_locate *rp,long ttl)
 {
   rp->state = STATE_FINISHED;
-  rp->expiretime = sweeptime + (double)ttl;
+  rp->expiretime = geoip_sweeptime + (double)ttl;
   geoip_untieresolve(rp);
   if (geoip_debug) {
     snprintf(tempstring, sizeof(tempstring), "geoip: Locate successful: %s, %s\n",rp->geoip->country_name, rp->geoip->city);
@@ -535,7 +572,7 @@ void geoip_sendrequest(struct geoip_locate *rp)
     rp->id = (word)geoip_idseed;
   } while (geoip_findid(rp->id));
   geoip_linkresolveid(rp);
-  geoip_resendrequest(rp);
+	geoip_dorequest(rp);
 }
 
 void geoip_linkresolveid(struct geoip_locate *addrp)

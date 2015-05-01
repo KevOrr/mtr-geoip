@@ -19,7 +19,7 @@
 #include <config.h>
 #include <netinet/in.h>
 struct geoip_t {
-        int            	date_requested; /* last time it was requested */
+        time_t          date_requested; /* last time it was requested */
                                         /* for retry after timeout */
         unsigned short  is_available;   /* was it received */
 
@@ -55,6 +55,7 @@ struct geoip_locate {
 	byte	  	    state;
 };
 
+void geoip_dorequest(struct geoip_locate* rp);
 void geoip_unlinkresolve(struct geoip_locate *rp);
 void geoip_unlinkresolveid(struct geoip_locate *rp);
 void geoip_unlinkresolveip(struct geoip_locate *rp);
@@ -62,13 +63,11 @@ dword geoip_getidbash(word id);
 dword geoip_getipbash(ip_t *ip);
 int geoip_istime(double x, double *sinterval);
 void geoip_passrp(struct geoip_locate *rp, long ttl);
-void geoip_dorequest(char *s, word id);
 void geoip_restell(char *s);
 void geoip_untieresolve(struct geoip_locate *rp);
 void geoip_failrp(struct geoip_locate *rp);
 char *geoip_strlongip(ip_t *ip);
 void geoip_sendrequest(struct geoip_locate *rp);
-void geoip_resendrequest(struct geoip_locate *rp);
 struct geoip_locate *geoip_findip(ip_t *ip);
 void geoip_linkresolve(struct geoip_locate *rp);
 struct geoip_locate *geoip_allocresolve(void);
@@ -98,10 +97,13 @@ mtr_curses_hosts(int startstat)
 				.. geoip_sendrequest(rp)
 					.. loop geoip_findid(rp->id)
 					.. geoip_linkresolveid(rp)
-					.. geoip_resendrequest(rp)
-						.. // geoip_dorequest(tempstring, rp->id)
+D						.. geoip_dorequest(rp)
 
 					.. read socket to process the chain of geoip_locate
 						.. in geoip_events (called by select.c) it will then receive the writ
+
+The thing here is really complex.
+Better off just issuing all requests sequentially, iif c is pressed.
+maybe we can even use blocking mode, or connected socket mode.
 */
 
