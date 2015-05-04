@@ -217,6 +217,11 @@ void select_loop(void) {
       anyset = 1;
     }
 
+	if (geoipfd && FD_ISSET(geoipfd, &readfd)) {
+		geoip_ack();
+		anyset = 1;
+	}
+
     /*  Has a key been pressed?  */
     if(FD_ISSET(0, &readfd)) {
       switch (display_keyaction()) {

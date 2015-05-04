@@ -69,13 +69,15 @@ char freegeoip_useragent[] = "mtr-geoip";
 int monofd;			/* just look up the first one for the time being */
 int tmpres;
 struct sockaddr_in *monosock;
+int nbRequestSent = 0;	// for now we will limit this to <=1
 
 enum {
    STATE_FINISHED,
    STATE_FAILED,
    STATE_REQ1,
    STATE_REQ2,
-   STATE_REQ3
+   STATE_REQ3,
+	 STATE_REQ4
 };
 
 
@@ -89,9 +91,10 @@ char tempstring[16384+1+1];
 #define BashSize 8192			/* Size of hash tables */
 #define BashModulo(x) ((x) & 8191)	/* Modulo for hash table size: */
 #define HostnameLength 255		/* From RFC */
-#define ResRetryDelay1 3
-#define ResRetryDelay2 4
-#define ResRetryDelay3 5
+#define ResRetryDelay1 5
+#define ResRetryDelay2 10
+#define ResRetryDelay3 22
+#define ResRetryDelay4 45
 
 struct geoip_locate *geoip_idbash[BashSize];
 struct geoip_locate *geoip_ipbash[BashSize];
@@ -132,6 +135,13 @@ dword geoip_res_resend = 0;
 dword geoip_res_timeout = 0;
 dword geoip_resolvecount = 0;
 
+double geoip_currenttime()
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
+}
+
 void geoip_open(void)
 {
 	/* create TCP socket */
@@ -159,7 +169,7 @@ void geoip_open(void)
 		//for (j=0; j<hent->h_length; j++) fprintf(stdout, "hent[%d]: %s\n", j, hent->h_addr_list[j]);
 		char** addr = hent->h_addr_list;
 		do {
-			fprintf(stdout, "hent[]: %s (%s)\n", *addr, freegeoip_address);
+			fprintf(stdout, "hent: %s (%s)\n", inet_ntoa(*((struct in_addr*)addr)), freegeoip_address);
 			//if (inet_ntop(AF_INET, (void *)hent->h_addr_list[0], freegeoip_address, iplen) == NULL) { 
 			if (inet_ntop(AF_INET, (void *)*addr, freegeoip_address, iplen) == NULL) { 
 				found = 0; 
@@ -211,60 +221,64 @@ void geoip_open(void)
 
 void geoip_events(double *sinterval)
 {
+
+
   struct geoip_locate *rp, *nextrp;
-/*	geoip_restell("BLABLABLA");
- */
-//	if (!geoip_expireresolves) fprintf(stderr, "NOTHNG TO expiresolves");
-//	else {
-//		rp = geoip_expireresolves;
-//		fprintf(stderr, "TATATA sweep:%f exp:%f", geoip_sweeptime, rp->expiretime);
-//		exit(1);
-//	}
- for (rp = geoip_expireresolves;(rp) && (geoip_sweeptime >= rp->expiretime);rp = nextrp) {
-fprintf(stderr, "state:%d\n", rp->state);
+	geoip_sweeptime = geoip_currenttime();
+  for (rp = geoip_expireresolves;(rp) && (geoip_sweeptime >= rp->expiretime);rp = nextrp) {
+		fprintf(stderr, "state:%d\n", rp->state);
     nextrp = rp->next;
     switch (rp->state) {
-    case STATE_FINISHED:	/* TTL has expired */
-fprintf(stderr, "finished");
-exit(1);
-    case STATE_FAILED:	/* Fake TTL has expired */
-fprintf(stderr, "failed");
-exit(1);
-/*      if (geoip_debug) {
-	snprintf(tempstring, sizeof(tempstring), "geoip_locator: Cache record for \"%s\" (%s) has expired. (state: %u)  Marked for expire at: %g, time: %g.",
-                nonull(rp->hostname), geoip_strlongip( &(rp->ip) ), 
-		rp->state, rp->expiretime, geoip_sweeptime);
-	geoip_restell(tempstring);
-      }
-*/
-      geoip_unlinkresolve(rp);
-      break;
-    case STATE_REQ1:	/* First T_PTR send timed out */
-			geoip_dorequest(rp);
-      geoip_restell("geoip locator: Send #2 for \"PTR\" query...");
-      fprintf(stderr, "geoip locator: Send #2 for \"PTR\" query...");
-      rp->state++;
-      rp->expiretime = geoip_sweeptime + ResRetryDelay2;
-      (void)geoip_istime(rp->expiretime,sinterval);
-      geoip_res_resend++;
-      break;
-    case STATE_REQ2:	/* Second T_PTR send timed out */
-			geoip_dorequest(rp);
-      geoip_restell("geoip locator: Send #3 for \"PTR\" query...");
-      rp->state++;
-      rp->expiretime = geoip_sweeptime + ResRetryDelay3;
-      (void)geoip_istime(rp->expiretime,sinterval);
-      geoip_res_resend++;
-      break;
-    case STATE_REQ3:	/* Third T_PTR timed out */
-      geoip_restell("geoip locator: \"PTR\" query timed out.");
-      geoip_failrp(rp);
-      (void)geoip_istime(rp->expiretime,sinterval);
-      geoip_res_timeout++;
-      break;
-		default:	
-			fprintf(stderr, "AFAWFWEF");
-			geoip_restell("GEOIP DEFAULT");
+    	case STATE_FINISHED:	/* TTL has expired */
+				fprintf(stderr, "finished");
+				exit(1);
+    	case STATE_FAILED:	/* Fake TTL has expired */
+				fprintf(stderr, "failed");
+				exit(1);
+      	geoip_unlinkresolve(rp);
+      	break;
+    	case STATE_REQ1:	/* First T_PTR send timed out */
+				geoip_dorequest(rp);
+  	    geoip_restell("geoip locator: Send #2...");
+   		  fprintf(stderr, "geoip locator: Send #2...");
+      	rp->state++;
+      	rp->expiretime = geoip_sweeptime + ResRetryDelay2;
+fprintf(stderr, "sweeptime: %f\n", geoip_sweeptime);
+				fprintf(stderr, "REQ1 expiretime: %f\n", rp->expiretime);
+      	(void)geoip_istime(rp->expiretime,sinterval);
+      	geoip_res_resend++;
+      	break;
+    	case STATE_REQ2:	/* Second T_PTR send timed out */
+				geoip_dorequest(rp);
+      	geoip_restell("geoip locator: Send #3...");
+      	rp->state++;
+      	rp->expiretime = geoip_sweeptime + ResRetryDelay3;
+
+fprintf(stderr, "sweeptime: %f\n", geoip_sweeptime);
+				fprintf(stderr, "REQ2 expiretime: %f\n", rp->expiretime);
+      	(void)geoip_istime(rp->expiretime,sinterval);
+      	geoip_res_resend++;
+      	break;
+    	case STATE_REQ3:	/* Second T_PTR send timed out */
+				geoip_dorequest(rp);
+      	geoip_restell("geoip locator: Send #4...");
+      	rp->state++;
+      	rp->expiretime = geoip_sweeptime + ResRetryDelay4;
+
+fprintf(stderr, "sweeptime: %f\n", geoip_sweeptime);
+				fprintf(stderr, "REQ3 expiretime: %f\n", rp->expiretime);
+      	(void)geoip_istime(rp->expiretime,sinterval);
+      	geoip_res_resend++;
+      	break;
+    	case STATE_REQ4:	/* Third T_PTR timed out */
+      	geoip_restell("geoip locator: query timed out.");
+      	geoip_failrp(rp);
+      	(void)geoip_istime(rp->expiretime,sinterval);
+      	geoip_res_timeout++;
+      	break;
+			default:	
+				fprintf(stderr, "AFAWFWEF");
+				geoip_restell("GEOIP DEFAULT");
     }
   }
   if (geoip_expireresolves)
@@ -340,6 +354,10 @@ void geoip_dorequest(struct geoip_locate* rp)
 #endif
 */
 	// Build query
+if (nbRequestSent >= 1) {
+//fprintf(stderr, "For now, only one request sent");
+return;
+}
 	char query[256];
 	char page[100];
   sprintf(tempstring,"/csv/%u.%u.%u.%u",
@@ -348,22 +366,47 @@ void geoip_dorequest(struct geoip_locate* rp)
 	    ((byte *)&rp->ip)[2],
 	    ((byte *)&rp->ip)[3]);
 	strcpy(page, tempstring);
-	char *tpl = "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
+	char *tpl = "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
 	// -5 to consider the %s %s %s in tpl and the ending \0
 	sprintf(query, tpl, page, freegeoip_host, freegeoip_useragent);
 	fprintf(stderr, "Query is:\n<<START>>\n%s<<END>>\n", query);
 
 	// Send the query to the server
-	int sent = 0;
-	while(sent < strlen(query)) {
-		int howmany = send(monofd, query+sent, strlen(query)-sent, 0);
-		if(howmany == -1) {
-			fprintf(stderr, "Can't send query\n");
-			exit(1);
-		}
-		sent += howmany;
+	int howmany = sendto(monofd, query, strlen(query), 0
+			,(struct sockaddr*) monosock, sizeof(struct sockaddr*)
+	);
+	if(howmany == -1) {
+		fprintf(stderr, "Can't send query\n");
+		exit(1);
 	}
-	// Now it is time to receive, we will select	
+	nbRequestSent++;
+	// Now it is time to receive, we will not select for now
+/*	char buf[BUFSIZ+1];
+	memset(buf, 0, sizeof(buf));
+	int htmlstart = 0;
+	char *htmlcontent;
+	int howmany;
+	while((howmany = recv(monofd, buf, BUFSIZ, 0)) > 0) {
+		if (htmlstart == 0) {
+			// if the \r\n\r\n part is splitted into 2 messages 
+			//	 it will fail to detect the beginning of HTML content
+			htmlcontent = strstr(buf, "\r\n\r\n");
+			if (htmlcontent != NULL) {
+				htmlstart = 1;
+				htmlcontent += 4;
+			}
+		} else {
+			htmlcontent = buf;
+		}
+		if (htmlstart) {
+			fprintf(stdout, "%s\n", htmlcontent);
+		}
+		memset(buf, 0, monofd);
+	}
+	if (monofd < 0) {
+		fprintf(stderr, "%s\n", "geoip error receiving data");
+	}
+	*/
 }
 
 void geoip_restell(char *s)
@@ -372,6 +415,11 @@ void geoip_restell(char *s)
   fputs("\r",stderr);
 }
 
+void geoip_ack()
+{
+	fprintf(stderr, "geoip_ack..");
+	geoip_restell("geoip_ack..");
+}
 
 void geoip_failrp(struct geoip_locate *rp)
 {
@@ -480,7 +528,7 @@ int geoip_istime(double x,double *sinterval)
   if (x) {
     if (x > geoip_sweeptime) {
       if (*sinterval > x - geoip_sweeptime)
-	*sinterval = x - geoip_sweeptime;
+				*sinterval = x - geoip_sweeptime;
     } else
       return 1;
   }

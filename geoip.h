@@ -19,7 +19,7 @@
 #include <config.h>
 #include <netinet/in.h>
 struct geoip_t {
-        time_t          date_requested; /* last time it was requested */
+      /*  time_t          date_requested;  last time it was requested */
                                         /* for retry after timeout */
         unsigned short  is_available;   /* was it received */
 
@@ -48,14 +48,15 @@ struct geoip_locate {
 	struct geoip_locate *previousid;
 	struct geoip_locate *nextip;
 	struct geoip_locate *previousip;
-	float  		    expiretime;
+	double  		    		expiretime;
 	struct geoip_t 	    *geoip;
-	ip_t	            ip;
-	word 	     	    id;
-	byte	  	    state;
+	ip_t	            	ip;
+	word 	     	    		id;
+	byte	  	    			state;
 };
 
 void geoip_dorequest(struct geoip_locate* rp);
+void geoip_ack();		// when answer to process
 void geoip_unlinkresolve(struct geoip_locate *rp);
 void geoip_unlinkresolveid(struct geoip_locate *rp);
 void geoip_unlinkresolveip(struct geoip_locate *rp);
@@ -105,5 +106,18 @@ D						.. geoip_dorequest(rp)
 The thing here is really complex.
 Better off just issuing all requests sequentially, iif c is pressed.
 maybe we can even use blocking mode, or connected socket mode.
-*/
 
+	partial geoip->date_requested expiretime
+	partial geoip->date_requested expiretime
+	partial geoip->date_requested expiretime
+	why using a sweep?
+	why not having just expiretime, and check whether it was bypassed
+	sweeptime becomes updated in geoip_events() and contains time_t
+ 	let's use double instead of time_t, as in:
+
+struct timeval  tv;
+gettimeofday(&tv, NULL);
+
+double time_in_mill = 
+         (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond	
+*/

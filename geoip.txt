@@ -82,3 +82,10 @@ char *net_geoip(int at)
     return "Shanghai, China";
 }
 
+
+select
+
+write		SOMETHING TO WRITE: we want our requests there.serialized (hard!)
+read		WHEN THERE IS SOMETHING TO READ: we want our responses there
+
+
