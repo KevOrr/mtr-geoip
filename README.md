@@ -1,3 +1,3 @@
 Too early to recommend using it yet. 
 
-I forked `mtr` because my aim is to make it a tool combining not only `traceroute` and `ping`, but also geolocation of IPs of the hosts along the route. The new code still needs a lot of testing.
+The aim of this fork is to make the great `mtr` not only a tool combining `traceroute` and `ping`, but also getting the geolocation of IPs of hosts traversed along the route, esp. in text mode. The new code still needs a lot of testing.
