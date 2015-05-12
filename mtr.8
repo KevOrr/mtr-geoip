@@ -1,4 +1,4 @@
-.TH MTR 8 "July 12, 2014" "mtr" "mtr"
+.TH MTR 8 "May 5, 2015" "mtr" "mtr"
 .SH NAME
 mtr \- a network diagnostic tool
 .SH SYNOPSIS
@@ -39,6 +39,9 @@ mtr \- a network diagnostic tool
 ]
 [\c
 .B \-\-no-dns\c
+]
+[\c
+.B \-\-no-geolocation\c
 ]
 [\c
 .B \-\-show-ips\c
@@ -215,6 +218,14 @@ Use this option to force
 .B mtr 
 to display numeric IP numbers and not try to resolve the
 host names. 
+.TP
+.B \-N\fR, \fB\-\-no\-geolocation
+Use this option to force
+.B mtr not to use the geoip location. This might speed up initialization,
+since a persistent connection to the geolocation needs to be established
+when mtr starts up otherwise. When geolocation is enabled, you can simply press
+.B c
+to toggle the location of the hosts (only available with curses for now).
 .TP
 .B \-b\fR, \fB\-\-show\-ips
 Use this option to tell

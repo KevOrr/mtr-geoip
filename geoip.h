@@ -16,108 +16,49 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <config.h>
-#include <netinet/in.h>
-struct geoip_t {
-      /*  time_t          date_requested;  last time it was requested */
-                                        /* for retry after timeout */
-        unsigned short  is_available;   /* was it received */
-
-        char            *country_code;  /* US */
-        char            *country_name;  /* United States */
-        char            *region_code;   /* CA */
-        char            *region_name;   /* California */
-        char            *city;          /* Mountain View */
-        char            *zip_code;      /* 94040 */
-        char            *time_zone;     /* America/Los Angeles */
-        float           latitude;       /* 37.386 */
-        float           longitude;      /* -122.084 */
-        short int       metro_code;     /* 807 */
-} geoip_t; 
-
-void geoip_open(void);
-void geoip_lookup(ip_t * address, struct geoip_t *pgeoip_t); /* start locating */
-
-void geoip_events(double *sinterval);
-int geoip_waitfd(void);
-
-struct geoip_locate {
-	struct geoip_locate *next;
-	struct geoip_locate *previous;
-	struct geoip_locate *nextid;
-	struct geoip_locate *previousid;
-	struct geoip_locate *nextip;
-	struct geoip_locate *previousip;
-	double  		    		expiretime;
-	struct geoip_t 	    *geoip;
-	ip_t	            	ip;
-	word 	     	    		id;
-	byte	  	    			state;
-};
-
-void geoip_dorequest(struct geoip_locate* rp);
-void geoip_ack();		// when answer to process
-void geoip_unlinkresolve(struct geoip_locate *rp);
-void geoip_unlinkresolveid(struct geoip_locate *rp);
-void geoip_unlinkresolveip(struct geoip_locate *rp);
-dword geoip_getidbash(word id);
-dword geoip_getipbash(ip_t *ip);
-int geoip_istime(double x, double *sinterval);
-void geoip_passrp(struct geoip_locate *rp, long ttl);
-void geoip_restell(char *s);
-void geoip_untieresolve(struct geoip_locate *rp);
-void geoip_failrp(struct geoip_locate *rp);
-char *geoip_strlongip(ip_t *ip);
-void geoip_sendrequest(struct geoip_locate *rp);
-struct geoip_locate *geoip_findip(ip_t *ip);
-void geoip_linkresolve(struct geoip_locate *rp);
-struct geoip_locate *geoip_allocresolve(void);
-void geoip_linkresolve(struct geoip_locate *rp);
-void geoip_linkresolveid(struct geoip_locate *addrp);
-void geoip_linkresolveip(struct geoip_locate *addrp);
-void *geoip_statmalloc(size_t size);
-struct geoip_locate *geoip_findip(ip_t * ip);
-struct geoip_locate *geoip_findid(word id);
+int geoip_enabled;  /* This can be disabled (0) with --no-geolocation or -N */
+int geoip_is_ui_shown; //unsure yet 
 
 /*
-Where is it called?
--------------------
-mtr_curses_hosts(int startstat)
-	if (r == geoip_t* net_geoip(at) == null)
-		geoip_lookup(ip, r)
-			.. we get an ip and a geoip_t pointing to the result to fill
-			.. prepare, if not cached :
-				.. a geoip_locate* w/ geoip_allocresolve()
-				.. set its ->geoip 
-				.. set its initial state to STATE_REQ1
-				.. set its expire time
-				.. addrcpy
-				.. geoip_linkresolve()
-				.. addrcpy
-				.. geoip_linkresolveip()
-				.. geoip_sendrequest(rp)
-					.. loop geoip_findid(rp->id)
-					.. geoip_linkresolveid(rp)
-D						.. geoip_dorequest(rp)
-
-					.. read socket to process the chain of geoip_locate
-						.. in geoip_events (called by select.c) it will then receive the writ
-
-The thing here is really complex.
-Better off just issuing all requests sequentially, iif c is pressed.
-maybe we can even use blocking mode, or connected socket mode.
-
-	partial geoip->date_requested expiretime
-	partial geoip->date_requested expiretime
-	partial geoip->date_requested expiretime
-	why using a sweep?
-	why not having just expiretime, and check whether it was bypassed
-	sweeptime becomes updated in geoip_events() and contains time_t
- 	let's use double instead of time_t, as in:
-
-struct timeval  tv;
-gettimeofday(&tv, NULL);
-
-double time_in_mill = 
-         (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond	
+    GeoIP location for mtr --
+    Copyright (C) 2015 by Alexandre van 't Westende <emugel@qq.com>
+    Released under GPL, as above.
 */
+
+const char*     geolocation_server_host;
+const int       geolocation_server_port;
+const char*     geolocation_server_useragent;
+
+/*
+    geo_location holds hosts and their responses (i.e. if they arrived yet), 
+    and are organized as a chained list, the last pointer is called
+    geo_tail (it points to NULL if empty).
+*/
+struct geo_location {
+    char*       host;               // eg: "8.8.8.8", "chess.com", "dyndns.com"
+    int         sent;               // 0 if request was not sent yet, 1 otherwise
+    
+    struct geo_location* prev;      // pointer to the prev. NULL otherwise
+
+    char        ip[40];             // e.g. "68.71.245.5" or "fa42:52::1"
+                                    // textual IPv6 uses 39bytes max, 15 for IPv4
+    char        country_code[4];    // e.g. "US". ISO 3166 defines 2 to 3
+    char        country_name[64];   // e.g. "United States"
+    char        region_code[4];     // e.g. "CA"
+    char        region_name[64];    // e.g. "California"
+    char        city_name[64];      // e.g. "Beverly Hills"
+    char        zip[10];            // e.g. "90211"
+    char        tz[128];            // e.g. "America/Los_Angeles" (time zone)
+    float       longitude;          // e.g. 34.04
+    float       latitude;           // e.g. -118.38
+    int         metro_code;         // e.g. 803
+};
+
+
+int geoip_open();
+struct geo_location* geoip_locate(char* hostOrIp);
+int geoip_waitfd();                 // return 0 if not connected, or fd for select
+void geoip_read_socket();
+void geoip_write_socket();
+struct geo_location* geoip_next_request_to_write();
+void geoip_print_location(struct geo_location* p) ;

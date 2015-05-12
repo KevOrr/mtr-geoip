@@ -983,18 +983,6 @@ int net_jinta(int at)
   return (host[at].jinta); 
 }
 
-struct geoip_t *net_geoip(int at)
-{
-	struct geoip_t *r = (host[at].geoip);
-	if (r == NULL) {
-		r = (struct geoip_t *)(malloc(sizeof(struct geoip_t)));
-		r->is_available = 0;
-
-		geoip_lookup(&host[at].addr, r);
-	}
-	return r;
-}
-
 int net_max(void) 
 {
   int at;

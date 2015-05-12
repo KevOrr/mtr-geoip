@@ -55,11 +55,10 @@ void select_loop(void) {
   fd_set writefd;
   int anyset = 0;
   int maxfd = 0;
-  int dnsfd, netfd;
+  int dnsfd, netfd, geofd;
 #ifdef ENABLE_IPV6
   int dnsfd6;
 #endif
-  int geoipfd = 0;
   int NumPing = 0;
   int paused = 0;
   struct timeval lasttime, thistime, selecttime;
@@ -105,10 +104,13 @@ void select_loop(void) {
       if(dnsfd >= maxfd) maxfd = dnsfd + 1;
     } else dnsfd = 0;
 
-	geoipfd = geoip_waitfd();
-	FD_SET(geoipfd, &readfd);
-	if (geoipfd >= maxfd) maxfd = geoipfd + 1;
-	else geoipfd = 0;
+    geofd = geoip_waitfd();
+    if (geoip_enabled && geofd > 0) {
+        FD_SET(geofd, &readfd);
+        if (geofd >= maxfd) maxfd = geofd + 1;
+        if (geoip_next_request_to_write() != NULL)
+            FD_SET(geofd, &writefd);
+    }
 
     netfd = net_waitfd();
     FD_SET(netfd, &readfd);
@@ -202,9 +204,6 @@ void select_loop(void) {
       dns_events(&dnsinterval);
     }
 
-	geoipinterval = WaitTime;
-	geoip_events(&geoipinterval);	
-
     /*  Have we finished a nameservice lookup?  */
 #ifdef ENABLE_IPV6
     if(dns && dnsfd6 && FD_ISSET(dnsfd6, &readfd)) {
@@ -217,10 +216,14 @@ void select_loop(void) {
       anyset = 1;
     }
 
-	if (geoipfd && FD_ISSET(geoipfd, &readfd)) {
-		geoip_ack();
-		anyset = 1;
+	if (geofd && FD_ISSET(geofd, &readfd)) {
+	  geoip_read_socket();
+	  anyset = 1;
 	}
+    if (geofd && FD_ISSET(geofd, &writefd)) {
+        geoip_write_socket();
+        anyset = 1;
+    }
 
     /*  Has a key been pressed?  */
     if(FD_ISSET(0, &readfd)) {
@@ -254,7 +257,7 @@ void select_loop(void) {
 	}
 	break;
       case ActionGeoip:
-        use_geoip = !use_geoip;
+        geoip_is_ui_shown = geoip_is_ui_shown == 0 ? 1 : 0;
         display_clear();
     break;
 #ifdef IPINFO

@@ -55,7 +55,6 @@ int net_jitter(int at);
 int net_jworst(int at);
 int net_javg(int at);
 int net_jinta(int at);
-struct geoip_t *net_geoip(int at);
 ip_t * net_addrs(int at, int i);
 char *net_localaddr(void); 
 

@@ -285,6 +285,7 @@ void parse_arg (int argc, char **argv)
     				/* maybe above should change to -d 'x' */
 
     { "no-dns", 0, 0, 'n' },
+    { "no-geolocation", 0, 0, 'N' },
     { "show-ips", 0, 0, 'b' },
     { "order", 1, 0, 'o' },	/* fields to display & their order */
 #ifdef IPINFO
@@ -371,6 +372,9 @@ void parse_arg (int argc, char **argv)
       break;
     case 'n':
       dns = 0;
+      break;
+    case 'N':
+      geoip_enabled = 0;
       break;
     case 'i':
       WaitTime = atof (optarg);
@@ -555,8 +559,6 @@ int main(int argc, char **argv)
 
   /*  Get the raw sockets first thing, so we can drop to user euid immediately  */
 
-  geoip_open();
-
   if ( ( net_preopen_result = net_preopen () ) ) {
     fprintf( stderr, "mtr: unable to get raw sockets.\n" );
     exit( EXIT_FAILURE );
@@ -613,7 +615,7 @@ int main(int argc, char **argv)
               "\t\t[-Q TOS] [--mpls]\n"
               "\t\t[-a ADDRESS] [-f FIRST-TTL] [-m MAX-TTL]\n"
               "\t\t[--udp] [--tcp] [-P PORT] [-Z TIMEOUT]\n"
-              "\t\t[-M MARK] HOSTNAME\n", argv[0]);
+              "\t\t[--no-geolocation] [-M MARK] HOSTNAME\n", argv[0]);
        printf("See the man page for details.\n");
     exit(0);
   }
@@ -719,7 +721,7 @@ int main(int argc, char **argv)
     lock(argv[0], stdout);
       display_open();
       dns_open();
-
+      if (geoip_open() != 0) geoip_enabled = 0;
       display_loop();
 
       net_end_transit();
