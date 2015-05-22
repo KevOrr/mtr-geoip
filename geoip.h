@@ -58,6 +58,8 @@ struct geo_location {
 int geoip_open();
 struct geo_location* geoip_locate(char* hostOrIp);
 int geoip_waitfd();                 // return 0 if not connected, or fd for select
+void geoip_open_syslog();
+void geoip_toggle_display();
 void geoip_read_socket();
 void geoip_write_socket();
 struct geo_location* geoip_next_request_to_write();

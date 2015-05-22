@@ -257,7 +257,7 @@ void select_loop(void) {
 	}
 	break;
       case ActionGeoip:
-        geoip_is_ui_shown = geoip_is_ui_shown == 0 ? 1 : 0;
+        geoip_toggle_display();
         display_clear();
     break;
 #ifdef IPINFO

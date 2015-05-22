@@ -720,8 +720,8 @@ int main(int argc, char **argv)
 
     lock(argv[0], stdout);
       display_open();
+      geoip_open_syslog();
       dns_open();
-      if (geoip_open() != 0) geoip_enabled = 0;
       display_loop();
 
       net_end_transit();

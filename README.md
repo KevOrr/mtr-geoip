@@ -1,7 +1,14 @@
-Too early to recommend using it yet. 
+Fork of the venerable `mtr`. Mtr is that *nix tool that combines `traceroute` and `ping`. Now this fork also provides geolocation of the hosts traversed along the route when ran in **curses** mode (i.e. from the console and/or using the `--curses` switch). 
 
-The aim of this fork is to make the great `mtr` not only a tool combining `traceroute` and `ping`, but also getting the geolocation of IPs of hosts traversed along the route, esp. in text mode. It works but the new code still needs a lot of testing to be considered usable.
+## Compilation
 
-## Current version
+The autoconf still needs some work. For now you will need to run ./bootstrap, then ./configure and to fix the generated Makefile manually (it should not be difficult to change by hand, it simply misses the files geoip.c and geoip.h).
 
-Should you try it, please add 2>error.log after the command so as to redirect stderr, otherwise you will just get all the debugging messages. Eg: `mtr 8.8.8.8 2>log`
+## Usage
+
+Use it the same way as the regular mtr, e.g. `mtr slackware.com`. If you want
+geolocation, simply press **c** for **C**ountry/**C**ity.
+
+## Bugs
+
+This fork works but is still experimental. Feel free to propose modifications.

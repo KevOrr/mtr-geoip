@@ -372,8 +372,10 @@ void mtr_curses_hosts(int startstat)
                 printw("%26s", " ");
                 move(y, colgeo);
                 if (pgeo && strcmp(pgeo->country_name, "?") != 0) {
-                    if (strcmp(pgeo->city_name, "?") != 0) {
-                        printw("%s, %s", pgeo->city_name, pgeo->country_name);
+                    if (strcmp(pgeo->city_name, "?") != 0) { 
+                        int maxx;
+                        getmaxyx(stdscr, __unused_int, maxx);
+                        printw("%s %s", maxx < 100 ? pgeo->country_code : pgeo->country_name, pgeo->city_name);
                     } else {
                         printw("%s", pgeo->country_name);
                     }
@@ -612,30 +614,6 @@ void mtr_curses_graph(int startstat, int cols)
         attroff(A_BOLD);
 
         getyx(stdscr, y, __unused_int);
-        /* if (geoip_is_ui_shown && geoip_enabled) { */
-        /*     int colgeo = 20; */
-        /*     move(y, colgeo-1); */
-        /*     printw("%20s", " "); */
-        /*     move(y, colgeo); */
-        /*     printw("%s", "Unknown"); */
-        /* } */
-        /* if (geoip_is_ui_shown) { */
-        /*     struct geo_location *pgeo = geoip_locate(strlongip( addr )); */	
-  /* //          int colgeo = 20; */
-  /* //          move(y, colgeo-1); */
-/* //            printw("%20s", " "); */
-  /* //          move(y, colgeo); */
-        /*     if (pgeo && strcmp(pgeo->country_name, "?") != 0) { */
-        /*         if (strcmp(pgeo->city_name, "?") != 0) { */
-        /*             printw("%s, %s", pgeo->country_code, pgeo->city_name); */
-        /*         } else { */
-        /*             printw("%s", pgeo->country_name); */
-        /*         } */
-        /*     } */
-        /*     else { */
-        /*         printw("%-10s", "Unknown"); */
-        /*     } */
-        /* } */
         move(y, startstat);
 
         printw(" ");
@@ -669,7 +647,7 @@ void mtr_curses_redraw(void)
 
     move(0, 0);
     attron(A_BOLD);
-    pwcenter("My traceroute  [v" MTR_VERSION "+legum28]");
+    pwcenter("My traceroute  [v" MTR_VERSION);
     attroff(A_BOLD);
 
     mvprintw(1, 0, "%s (%s)", LocalHostname, net_localaddr());

@@ -18,6 +18,7 @@
 
 int geoip_enabled = 1;      // This can be disabled (0) with --no-geolocation or -N
 int geoip_is_ui_shown = 0;  // Whether it is currently shown in UI (curses)
+int geoip_was_init = 0;
 
 /*
     GeoIP location for mtr --
@@ -27,7 +28,7 @@ int geoip_is_ui_shown = 0;  // Whether it is currently shown in UI (curses)
 
 const char*     geolocation_server_host = "freegeoip.net";
 const int       geolocation_server_port = 80;
-const char*     geolocation_server_useragent = "mtr_geoip";
+const char*     geolocation_server_useragent = "mtr+geoip";
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,12 +42,34 @@ const char*     geolocation_server_useragent = "mtr_geoip";
 #include "geoip.h"
 extern int errno;
 
- #define geomax(a,b) \
+// [Debugging]
+// Set GEOIP_DEBUG to 1 and recompile to enable logs to syslog 
+// (if 0, messages to syslog are disabled).
+//
+// In your /etc/syslog.conf, you may want to add a line 
+//      user.*                  -/var/log/ALLUSERMESSAGES
+// Then send SIGHUP to syslogd so as to reload (ie: pkill -1 syslogd)
+// (this is so all messages get stored)
+#define GEOIP_DEBUG 0 
+
+#ifdef GEOIP_DEBUG
+    #include <syslog.h>
+    #define SYSLOG_DEBUG(fmt, args...) syslog(LOG_DEBUG, fmt, ##args)
+    #define SYSLOG_INFO(fmt, args...) syslog(LOG_INFO, fmt, ##args)
+    #define SYSLOG_WARN(fmt, args...) syslog(LOG_WARNING, fmt, ##args)
+    #define SYSLOG_ERR(fmt, args...) syslog(LOG_ERR, fmt, ##args)
+#else
+    #define SYSLOG_INFO(fmt, args...)
+    #define SYSLOG_WARN(fmt, args...)
+    #define SYSLOG_ERR(fmt, args...)
+#endif
+
+#define geomax(a,b) \
   ({ __typeof__ (a) _a = (a); \
      __typeof__ (b) _b = (b); \
      _a > _b ? _a : _b; })
 
- #define geomin(a,b) \
+#define geomin(a,b) \
   ({ __typeof__ (a) _a = (a); \
      __typeof__ (b) _b = (b); \
     _a < _b ? _a : _b; })                           
@@ -56,8 +79,28 @@ struct geo_location* geo_lastLocationRequested = NULL;
 int geoip_responses_awaited = 0;    // request sent: ++, response received: --
 struct sockaddr_in remote;
 int geoip_fd;                      // fd for persistent connection to "freegeoip.net"
-
 char buf[BUFSIZ+1];
+
+/**
+ * Toggle display in curses.
+ * Will also initialize if called the first time
+ */
+void geoip_toggle_display() {
+    if (!geoip_was_init) {
+        geoip_was_init = 1;
+        if (geoip_open() != 0) geoip_enabled = 0;
+    }
+    geoip_is_ui_shown = geoip_is_ui_shown == 0 ? 1 : 0;
+}
+
+void geoip_open_syslog() {
+    if (geoip_enabled) {
+        #ifdef GEOIP_DEBUG
+        openlog("mtr_geoip", 0, 0);
+        SYSLOG_INFO("Opening logs for mtr::geoip");
+        #endif
+    }
+}
 
 /**
  * Establish a persistent HTTP connection to geolocation server.
@@ -71,51 +114,50 @@ int geoip_open() {
     int*        fd   = &geoip_fd;
 
     if (geoip_enabled) {
-    
         struct hostent* hent;
         if ((hent = gethostbyname(host)) == NULL) {
-            perror("gethostbyname() error");
+            SYSLOG_ERR("gethostbyname(%s) error", host);
             geoip_enabled = 0;
             return 1;
         }
-        else fprintf(stderr, "gethostbyname() is OK...\n");
+        else SYSLOG_INFO("gethostbyname(%s) is OK...\n", host);
 
         char tmpip[16];
         if (inet_ntop(AF_INET, (void*) hent->h_addr_list[0], tmpip, 16) == NULL) {
-            perror("Can't resolve host"); 
+            SYSLOG_ERR("Can't resolve host %s", host); 
             geoip_enabled = 0;
             return 1;
-        } else fprintf(stderr, "IP: %s\n", tmpip);
+        } else SYSLOG_INFO("IP for %s: %s\n", host, tmpip);
 
         remote.sin_family = AF_INET;
         remote.sin_port = htons(port);
         remote.sin_addr = *((struct in_addr*)hent->h_addr);
         memset(&(remote.sin_zero), '\0', 8);
 
-        fprintf(stderr, "Using IP %s for %s.\n", inet_ntoa(remote.sin_addr), host);
+        SYSLOG_INFO("Using IP %s for %s.\n", inet_ntoa(remote.sin_addr), host);
 
         if ((*fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) { 
-            perror("Can't create TCP socket"); 
+            SYSLOG_ERR("Can't create TCP socket"); 
             geoip_enabled = 0;
             return 1; 
         }
-        else fprintf(stderr, "Socket created\n");
+        else SYSLOG_INFO("Socket created\n");
 
         // Look into the host entries until one accepts us
         int nEntry;
         for (nEntry=0; hent->h_addr_list[nEntry] != NULL; nEntry++) {
             remote.sin_addr = *(struct in_addr*) hent->h_addr_list[nEntry];
-            fprintf(stderr, "Attempting to connect to %s...\n", inet_ntoa(remote.sin_addr));
+            SYSLOG_INFO("Attempting to connect to %s...\n", inet_ntoa(remote.sin_addr));
             if (connect( *fd, (struct sockaddr*) &remote, 
                             sizeof(struct sockaddr)) < 0) {
-                perror("  failed");
+                SYSLOG_WARN("  failed");
             }
             else {
-                fprintf(stderr, " Success. filedesc is #%d!\n", *fd);
+                SYSLOG_INFO(" Success. filedesc is #%d!\n", *fd);
                 return 0;
             }
         }
-        fprintf(stderr, "All host entries for %s failed.\n", host);
+        SYSLOG_ERR("All host entries for %s failed.\n", host);
         geoip_enabled = 0;
     }
     return 1;
@@ -138,45 +180,39 @@ int geoip_open() {
  */
 struct geo_location* geoip_locate(char* hostOrIp) {
     struct geo_location* p;
-    
-    fprintf(stderr, 
-            "locate '%s' (size is %u):\n", hostOrIp, strlen(hostOrIp));
-
 
     // see if it's in the cache already
     for (p = geo_tail; p != NULL; p = p->prev) {
         if (p != NULL && strcmp(p->host, hostOrIp) == 0) {
-
-            fprintf(stderr, 
-                " FOUND in cache\n");
-
+            // warning: this will generate a lot of logs if uncommented
+            //SYSLOG_DEBUG("locate '%s' (size is %u):\n", hostOrIp, strlen(hostOrIp));
+            //SYSLOG_DEBUG(" FOUND in cache\n");
             return p;
         }
     }
-
-    fprintf(stderr, " Not found in cache\n");
-
+    SYSLOG_DEBUG("locate '%s' (size is %u):\n", hostOrIp, strlen(hostOrIp));
+    SYSLOG_INFO(" Not found in cache\n");
 
     // unknown. allocate a partially filled struct.
     // it will be auto-detected in geoip_events() and server will be queried.
-    fprintf(stderr, "log malloc() of %u bytes in geoip_locate\n",
+    SYSLOG_DEBUG("log malloc() of %u bytes in geoip_locate\n",
                 (unsigned int)sizeof(struct geo_location));
 
     p = (struct geo_location*) malloc(sizeof(struct geo_location));
     if (p == NULL) {
-        fprintf(stderr, "malloc() of %u bytes failed in geoip_locate (1/2): %s\n",
+        SYSLOG_WARN("malloc() of %u bytes failed in geoip_locate (1/2): %s\n",
                 (unsigned int)sizeof(struct geo_location), strerror(errno));
         return NULL;
     }
 
     p->sent = 0;
 
-    fprintf(stderr, "log malloc() of %u bytes in geoip_locate (2/2)\n",
+    SYSLOG_DEBUG("log malloc() of %u bytes in geoip_locate (2/2)\n",
             (unsigned int) strlen(hostOrIp));
 
     p->host = (char*) malloc(strlen(hostOrIp)+1);
     if (p->host == NULL) {
-        fprintf(stderr, "malloc() of %u bytes failed in geoip_locate (2/2): %s\n",
+        SYSLOG_WARN("malloc() of %u bytes failed in geoip_locate (2/2): %s\n",
                 (unsigned int) strlen(hostOrIp), strerror(errno));
         free(p);
         return NULL;
@@ -231,7 +267,7 @@ void geoip_write_socket() {
     //  otherwise the socket wouldn't have been put in select writefds.
     struct geo_location* pFirstToWrite = geoip_next_request_to_write();
     if (pFirstToWrite == NULL) {
-        fprintf(stderr, "Warn: why nothing to write? geoip_write_socket\n");
+        SYSLOG_WARN("Warn: why nothing to write? geoip_write_socket\n");
         return;
     }
 
@@ -245,20 +281,20 @@ void geoip_write_socket() {
            );
     pFirstToWrite->sent = 1;
     geo_lastLocationRequested = pFirstToWrite;
-    //fprintf(stderr, "Query is:\n<<START>>\n%s<<END>>\n", query);
+    //SYSLOG_DEBUG("Query is:\n<<START>>\n%s<<END>>\n", query);
 
     int sent = send(geoip_fd, buf, strlen(buf), 0);
     if (sent == -1) { 
-        perror("Can't send query. Wouldn't it send in one pass?"); 
+        perror("Can't send query. Why couldn't it be send in one pass?"); 
         exit(1); 
     }
-    else fprintf(stderr, " %d bytes sent.\n", sent);
+    //else SYSLOG_DEBUG(" %d bytes sent.\n", sent);
     geoip_responses_awaited++;
     return;
 }
 
 void geoip_print_location(struct geo_location* p) {
-    fprintf(stderr, "\
+    SYSLOG_DEBUG("\
 Location of %s:\n\
  ip address: \t%s\n\
  country: \t%s %s\n\
@@ -287,18 +323,18 @@ void geoip_read_socket() {
     // socket has stuffs to read
     // FD_CLR(nFd, &read_fds);      // done in select.c?
     memset(buf, '\0', BUFSIZ);
-    fprintf(stderr, "Received answer for geoip (unique fd #%d)\n", geoip_fd);
+    SYSLOG_DEBUG("Received answer for geoip (unique fd #%d)\n", geoip_fd);
     char buf[BUFSIZ+1];
     int sent = recv(geoip_fd, buf, BUFSIZ, 0);
 
-geoip_responses_awaited--;
-if (geoip_responses_awaited < 0) geoip_responses_awaited = 0;
+    geoip_responses_awaited--;
+    if (geoip_responses_awaited < 0) geoip_responses_awaited = 0;
 
     if (sent == 0) { // FIN
-        fprintf(stderr, "Connection closed by the server!\n");
-        fprintf(stderr, "We would normally need to reconnect\n");
+        SYSLOG_WARN("Connection closed by the server!\n");
+        SYSLOG_WARN("We would normally need to reconnect\n");
         geoip_fd = 0;
-        //                geoip_enabled = 0;
+        // geoip_enabled = 0;
         return;
     }
     switch (errno) {
@@ -311,20 +347,20 @@ if (geoip_responses_awaited < 0) geoip_responses_awaited = 0;
         case ENOMEM :
         case ENOTCONN :
         case ENOTSOCK :
-            perror("Oooops");
+            SYSLOG_WARN("Ooops");
             break;
         default: 
-            fprintf(stderr, "Response in geoip_read_socket has %d bytes\n", sent);
+            SYSLOG_DEBUG("Response in geoip_read_socket has %d bytes\n", sent);
     }
     char* start = strstr(buf, "\r\n\r\n") + 4;
-    if (start == NULL) fprintf(stderr, "Unable to find start of body: %s\n", buf);
+    if (start == NULL) SYSLOG_WARN("Unable to find start of body: %s\n", buf);
     else {
         // Find requested query
         // Since we have only one socket connected to the server, this should do
         struct geo_location* p = geo_lastLocationRequested;
 
         // Extract
-        fprintf(stderr, "Response body:\n%s\n", start);
+        SYSLOG_DEBUG("Response body:\n%s\n", start);
 
         int field = 0;
         int bLoop = 1;
