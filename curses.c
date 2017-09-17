@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* MacOSX may need this before scoket.h...*/
+/* MacOSX may need this before socket.h...*/
 #if defined(HAVE_SYS_TYPES_H)
 #include <sys/types.h>
 #else
@@ -739,16 +739,18 @@ void mtr_curses_redraw(void)
 
 void mtr_curses_open(void)
 {
-    initscr();
-    raw();
-    noecho(); 
-    start_color();
+  initscr();
+  raw();
+  noecho(); 
+  int bg_col = 0;
+  start_color();
 #ifdef HAVE_USE_DEFAULT_COLORS
-    use_default_colors();
+  if (use_default_colors() == OK)
+    bg_col = -1;
 #endif
-    int i;
-    for (i = 0; i < 8; i++)
-        init_pair(i+1, i, 0);
+  int i;
+  for (i = 0; i < 8; i++)
+      init_pair(i+1, i, bg_col);
 
     mtr_curses_init();
     mtr_curses_redraw();

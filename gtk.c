@@ -33,6 +33,7 @@
 #include "mtr.h"
 #include "net.h"
 #include "dns.h"
+#include "asn.h"
 #include "mtr-gtk.h"
 #include "version.h"
 
@@ -140,7 +141,7 @@ gint About_clicked(UNUSED GtkWidget *Button, UNUSED gpointer data)
         "Mike Simons <msimons@moria.simons-clan.com>",
         "Aaron Scarisbrick,",
         "Craig Milo Rogers <Rogers@ISI.EDU>",
-        "Antonio Querubin <tony@aloha.net>",
+        "Antonio Querubin <tony@lavanauts.org>",
         "Russell Nelson <rn-mtr@crynwr.com>",
         "Davin Milun <milun@acm.org>",
         "Josh Martin <jmartin@columbiaservices.net>",
@@ -294,6 +295,9 @@ static GtkWidget *ReportTreeView;
 static GtkListStore *ReportStore;
 
 enum {
+#ifdef IPINFO
+  COL_ASN,
+#endif
   COL_HOSTNAME,
   COL_LOSS,
   COL_RCV,
@@ -347,6 +351,9 @@ void TreeViewCreate(void)
   GtkTreeViewColumn *column;
 
   ReportStore = gtk_list_store_new(N_COLS,
+#ifdef IPINFO
+    G_TYPE_STRING,
+#endif
     G_TYPE_STRING,
     G_TYPE_FLOAT,
     G_TYPE_INT,
@@ -363,7 +370,20 @@ void TreeViewCreate(void)
   
   g_signal_connect(GTK_OBJECT(ReportTreeView), "button_press_event", 
   		    G_CALLBACK(ReportTreeView_clicked),NULL);
-  
+
+#ifdef IPINFO
+  if (is_printii()) {
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("ASN",
+      renderer,
+      "text", COL_ASN,
+      "foreground", COL_COLOR,
+      NULL);
+    gtk_tree_view_column_set_resizable(column, TRUE);
+    gtk_tree_view_append_column (GTK_TREE_VIEW(ReportTreeView), column);
+  }
+#endif
+
   renderer = gtk_cell_renderer_text_new ();
   column = gtk_tree_view_column_new_with_attributes ("Hostname",
     renderer,
@@ -389,7 +409,7 @@ void TreeViewCreate(void)
   g_object_set (G_OBJECT(renderer), "xalign", 1.0, NULL);
   column = gtk_tree_view_column_new_with_attributes ("Snt",
     renderer,
-    "text", 3,
+    "text", COL_SNT,
     "foreground", COL_COLOR,
     NULL);
   gtk_tree_view_column_set_resizable(column, TRUE);
@@ -399,7 +419,7 @@ void TreeViewCreate(void)
   g_object_set (G_OBJECT(renderer), "xalign", 1.0, NULL);
   column = gtk_tree_view_column_new_with_attributes ("Last",
     renderer,
-    "text", 4,
+    "text", COL_LAST,
     "foreground", COL_COLOR,
     NULL);
   gtk_tree_view_column_set_resizable(column, TRUE);
@@ -409,7 +429,7 @@ void TreeViewCreate(void)
   g_object_set (G_OBJECT(renderer), "xalign", 1.0, NULL);
   column = gtk_tree_view_column_new_with_attributes ("Avg",
     renderer,
-    "text", 6,
+    "text", COL_AVG,
     "foreground", COL_COLOR,
     NULL);
   gtk_tree_view_column_set_resizable(column, TRUE);
@@ -419,7 +439,7 @@ void TreeViewCreate(void)
   g_object_set (G_OBJECT(renderer), "xalign", 1.0, NULL);
   column = gtk_tree_view_column_new_with_attributes ("Best",
     renderer,
-    "text", 5,
+    "text", COL_BEST,
     "foreground", COL_COLOR,
     NULL);
   gtk_tree_view_column_set_resizable(column, TRUE);
@@ -429,7 +449,7 @@ void TreeViewCreate(void)
   g_object_set (G_OBJECT(renderer), "xalign", 1.0, NULL);
   column = gtk_tree_view_column_new_with_attributes ("Worst",
     renderer,
-    "text", 7,
+    "text", COL_WORST,
     "foreground", COL_COLOR,
     NULL);
   gtk_tree_view_column_set_resizable(column, TRUE);
@@ -439,7 +459,7 @@ void TreeViewCreate(void)
   g_object_set (G_OBJECT(renderer), "xalign", 1.0, NULL);
   column = gtk_tree_view_column_new_with_attributes ("StDev",
     renderer,
-    "text", 8,
+    "text", COL_STDEV,
     "foreground", COL_COLOR,
     NULL);
   gtk_tree_view_column_set_resizable(column, TRUE);
@@ -479,6 +499,10 @@ void update_tree_row(int row, GtkTreeIter *iter)
     COL_COLOR, net_up(row) ? "black" : "red",
 
     -1);
+#ifdef IPINFO
+  if (is_printii())
+    gtk_list_store_set(ReportStore, iter, COL_ASN, fmt_ipinfo(addr), -1);
+#endif
 }
 
 void gtk_redraw(void)

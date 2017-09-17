@@ -89,7 +89,10 @@ int  fstTTL = 1;                /* default start at first hop */
 /*int maxTTL = MaxHost-1;  */     /* max you can go is 255 hops */
 int   maxTTL = 30;              /* inline with traceroute */
                                 /* end ttl window stuff. */
-int remoteport = 80;            /* for TCP tracing */
+int maxUnknown = 5;				/* stop send package */
+                                /*when larger than this count */
+int remoteport = 0;            /* for TCP tracing */
+int localport = 0;             /* for UDP tracing */
 int tcp_timeout = 10 * 1000000;     /* for TCP tracing */
 
 
@@ -259,56 +262,60 @@ void parse_arg (int argc, char **argv)
   int opt;
   int i;
   /* IMPORTANT: when adding or modifying an option:
-       1/ mind the order of options, there is some logic;
-       2/ update the getopt_long call below;
+       0/ try to find a somewhat logical order;
+       1/ add the long option name in "long_options" below;
+       2/ add the short option name in the "getopt_long" call;
        3/ update the man page (use the same order);
-       4/ update the help message showed when using --help.
+       4/ update the help message (see PrintHelp).
    */
   static struct option long_options[] = {
-    { "help", 0, 0, 'h' },
-    { "version", 0, 0, 'v' },
+    /* option name, has argument, NULL, short name */
+    { "help",           0, NULL, 'h' },
+    { "version",        0, NULL, 'v' },
 
-    { "inet", 0, 0, '4' },	/* IPv4 only */
-    { "inet6", 0, 0, '6' },	/* IPv6 only */
+    { "inet",           0, NULL, '4' }, /* IPv4 only */
+    { "inet6",          0, NULL, '6' }, /* IPv6 only */
 
-    { "filename", 1, 0, 'F' },
+    { "filename",       1, NULL, 'F' },
 
-    { "report", 0, 0, 'r' },
-    { "report-wide", 0, 0, 'w' },
-    { "xml", 0, 0, 'x' },
-    { "curses", 0, 0, 't' },
-    { "gtk", 0, 0, 'g' },
-    { "raw", 0, 0, 'l' },
-    { "csv", 0, 0, 'C' },
-    { "displaymode", 1, 0, 'd' },
-    { "split", 0, 0, 'p' },     /* BL */
-    				/* maybe above should change to -d 'x' */
+    { "report",         0, NULL, 'r' },
+    { "report-wide",    0, NULL, 'w' },
+    { "xml",            0, NULL, 'x' },
+    { "curses",         0, NULL, 't' },
+    { "gtk",            0, NULL, 'g' },
+    { "raw",            0, NULL, 'l' },
+    { "csv",            0, NULL, 'C' },
+    { "displaymode",    1, NULL, 'd' },
+    { "split",          0, NULL, 'p' }, /* BL */
+                                        /* maybe above should change to -d 'x' */
 
-    { "no-dns", 0, 0, 'n' },
-    { "no-geolocation", 0, 0, 'N' },
-    { "show-ips", 0, 0, 'b' },
-    { "order", 1, 0, 'o' },	/* fields to display & their order */
+    { "no-dns",         0, NULL, 'n' },
+    { "no-geolocation", 0, NULL, 'N' },
+    { "show-ips",       0, NULL, 'b' },
+    { "order",          1, NULL, 'o' }, /* fields to display & their order */
 #ifdef IPINFO
-    { "ipinfo", 1, 0, 'y' },    /* IP info lookup */
-    { "aslookup", 0, 0, 'z' },  /* Do AS lookup (--ipinfo 0) */
+    { "ipinfo",         1, NULL, 'y' }, /* IP info lookup */
+    { "aslookup",       0, NULL, 'z' }, /* Do AS lookup (--ipinfo 0) */
 #endif
 
-    { "interval", 1, 0, 'i' },
-    { "report-cycles", 1, 0, 'c' },
-    { "psize", 1, 0, 's' },	/* changed 'p' to 's' to match ping option
-				   overload psize<0, ->rand(min,max) */
-    { "bitpattern", 1, 0, 'B' },/* overload b>255, ->rand(0,255) */
-    { "tos", 1, 0, 'Q' },	/* typeof service (0,255) */
-    { "mpls", 0, 0, 'e' },
-    { "address", 1, 0, 'a' },
-    { "first-ttl", 1, 0, 'f' },	/* -f & -m are borrowed from traceroute */
-    { "max-ttl", 1, 0, 'm' },
-    { "udp", 0, 0, 'u' },	/* UDP (default is ICMP) */
-    { "tcp", 0, 0, 'T' },	/* TCP (default is ICMP) */
-    { "port", 1, 0, 'P' },      /* target port number for TCP */
-    { "timeout", 1, 0, 'Z' },   /* timeout for TCP sockets */
+    { "interval",       1, NULL, 'i' },
+    { "report-cycles",  1, NULL, 'c' },
+    { "psize",          1, NULL, 's' }, /* overload psize<0, ->rand(min,max) */
+    { "bitpattern",     1, NULL, 'B' }, /* overload B>255, ->rand(0,255) */
+    { "tos",            1, NULL, 'Q' }, /* typeof service (0,255) */
+    { "mpls",           0, NULL, 'e' },
+    { "address",        1, NULL, 'a' },
+    { "first-ttl",      1, NULL, 'f' }, /* -f & -m are borrowed from traceroute */
+    { "max-ttl",        1, NULL, 'm' },
+	{ "max-unknown",    1, NULL, 'U' },
+    { "udp",            0, NULL, 'u' }, /* UDP (default is ICMP) */
+    { "tcp",            0, NULL, 'T' }, /* TCP (default is ICMP) */
+    { "sctp",           0, NULL, 'S' }, /* SCTP (default is ICMP) */
+    { "port",           1, NULL, 'P' }, /* target port number for TCP/SCTP/UDP */
+    { "localport",      1, NULL, 'L' }, /* source port number for UDP */
+    { "timeout",        1, NULL, 'Z' }, /* timeout for TCP sockets */
 #ifdef SO_MARK
-    { "mark", 1, 0, 'M' },      /* use SO_MARK */
+    { "mark",           1, NULL, 'M' }, /* use SO_MARK */
 #endif
     { 0, 0, 0, 0 }
   };
@@ -316,7 +323,7 @@ void parse_arg (int argc, char **argv)
   opt = 0;
   while(1) {
     opt = getopt_long(argc, argv,
-		      "hv46F:rwxtglCpnbo:y:zi:c:s:B:Q:ea:f:m:uTP:Z:M:", long_options, NULL);
+		      "hv46F:rwxtglCpnbo:y:zi:c:s:B:Q:ea:f:m:U:uTSP:L:Z:M:", long_options, NULL);
     if(opt == -1)
       break;
 
@@ -411,6 +418,12 @@ void parse_arg (int argc, char **argv)
 	fstTTL = maxTTL;
       }
       break;
+	case 'U':
+		maxUnknown = atoi(optarg);
+		if (maxUnknown < 1) {
+			maxUnknown = 1;
+		}
+		break;
     case 'o':
       /* Check option before passing it on to fld_active. */
       if (strlen (optarg) > MAXFLD) {
@@ -440,18 +453,30 @@ void parse_arg (int argc, char **argv)
       break;
     case 'u':
       if (mtrtype != IPPROTO_ICMP) {
-        fprintf(stderr, "-u and -T are mutually exclusive.\n");
+        fprintf(stderr, "-u , -T and -S are mutually exclusive.\n");
         exit(EXIT_FAILURE);
       }
       mtrtype = IPPROTO_UDP;
       break;
     case 'T':
       if (mtrtype != IPPROTO_ICMP) {
-        fprintf(stderr, "-u and -T are mutually exclusive.\n");
+        fprintf(stderr, "-u , -T and -S are mutually exclusive.\n");
         exit(EXIT_FAILURE);
+      }
+      if (!remoteport) {
+        remoteport = 80;
       }
       mtrtype = IPPROTO_TCP;
       break;
+    case 'S':
+      if (mtrtype != IPPROTO_ICMP) {
+        fprintf(stderr, "-u , -T and -S are mutually exclusive.\n");
+        exit(EXIT_FAILURE);
+      }
+      if (!remoteport) {
+        remoteport = 80;
+      }
+      mtrtype = IPPROTO_SCTP;
     case 'b':
       show_ips = 1;
       break;
@@ -459,6 +484,13 @@ void parse_arg (int argc, char **argv)
       remoteport = atoi(optarg);
       if (remoteport > 65535 || remoteport < 1) {
         fprintf(stderr, "Illegal port number.\n");
+        exit(EXIT_FAILURE);
+      }
+      break;
+    case 'L':
+      localport = atoi(optarg);
+      if (localport > 65535 || localport < MinPort) {
+        fprintf(stderr, "Illegal local port number.\n");
         exit(EXIT_FAILURE);
       }
       break;
@@ -613,9 +645,9 @@ int main(int argc, char **argv)
               "\t\t[--no-dns] [--show-ips] [-o FIELDS] [-y IPINFO] [--aslookup]\n"
               "\t\t[-i INTERVAL] [-c COUNT] [-s PACKETSIZE] [-B BITPATTERN]\n"
               "\t\t[-Q TOS] [--mpls]\n"
-              "\t\t[-a ADDRESS] [-f FIRST-TTL] [-m MAX-TTL]\n"
-              "\t\t[--udp] [--tcp] [-P PORT] [-Z TIMEOUT]\n"
-              "\t\t[--no-geolocation] [-M MARK] HOSTNAME\n", argv[0]);
+              "\t\t[-a ADDRESS] [-f FIRST-TTL] [-m MAX-TTL] [-U MAX_UNKNOWN]\n"
+              "\t\t[--udp] [--tcp] [--sctp] [-P PORT] [-L LOCALPORT] [-Z TIMEOUT]\n"
+              "\t\tp--no-geolocation] [-M MARK] HOSTNAME\n", argv[0]);
        printf("See the man page for details.\n");
     exit(0);
   }
@@ -717,6 +749,7 @@ int main(int argc, char **argv)
         continue;
       }
     }
+
 
     lock(argv[0], stdout);
       display_open();

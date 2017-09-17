@@ -38,7 +38,7 @@ extern int DisplayMode;
 #define mtr_curses_open()
 #define mtr_curses_close()
 #define mtr_curses_redraw()
-#define mtr_curses_keyaction()
+#define mtr_curses_keyaction() 0
 #define mtr_curses_clear()
 #else
 #include "mtr-curses.h"
@@ -106,6 +106,10 @@ void display_open(void)
     break;
   case DisplayGTK:
     gtk_open();
+#ifdef IPINFO
+    if (ipinfo_no >= 0)
+        asn_open();
+#endif
     break;
   }
 }
@@ -178,7 +182,17 @@ int display_keyaction(void)
 }
 
 
-void display_rawping(int host, int msec) 
+void display_rawxmit(int host, int seq)
+{
+  switch(DisplayMode) {
+  case DisplayRaw:
+    raw_rawxmit (host, seq);
+    break;
+  }
+}
+
+
+void display_rawping(int host, int msec, int seq)
 {
   switch(DisplayMode) {
   case DisplayReport:
@@ -190,7 +204,7 @@ void display_rawping(int host, int msec)
   case DisplayGTK:
     break;
   case DisplayRaw:
-    raw_rawping (host, msec);
+    raw_rawping (host, msec, seq);
     break;
   }
 }
